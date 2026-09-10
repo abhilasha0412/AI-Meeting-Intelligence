@@ -11,11 +11,24 @@ COLLECTION_NAME = "meeting_transcripts"
 class RAGService:
     def __init__(self):
         self.client = chromadb.PersistentClient(path=settings.CHROMA_PERSIST_DIR)
-        self.collection = self.client.get_or_create_collection(
-            name=COLLECTION_NAME,
-            embedding_function=get_embedding_function(),
-            metadata={"hnsw:space": "cosine"}
-        )
+        ef = get_embedding_function()
+        try:
+            self.collection = self.client.get_or_create_collection(
+                name=COLLECTION_NAME,
+                embedding_function=ef,
+                metadata={"hnsw:space": "cosine"}
+            )
+        except ValueError as ve:
+            logger.warning(f"ChromaDB collection embedding mismatch: {ve}. Resetting collection.")
+            try:
+                self.client.delete_collection(name=COLLECTION_NAME)
+            except Exception:
+                pass
+            self.collection = self.client.create_collection(
+                name=COLLECTION_NAME,
+                embedding_function=ef,
+                metadata={"hnsw:space": "cosine"}
+            )
         logger.info(f"ChromaDB initialized with collection: {COLLECTION_NAME}")
 
     def index_meeting(self, meeting_id: int, meeting_title: str, segments: List[Dict[str, Any]]):
